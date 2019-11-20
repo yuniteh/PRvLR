@@ -1,0 +1,111 @@
+%% 
+clear
+close
+clc
+
+set(0,'DefaultFigureWindowStyle','docked')
+set(0,'DefaultAxesFontName','Times New Roman')
+
+%%
+[file path] = uigetfile();
+load([path file])
+
+%% LOOP THROUGH METRICS
+for i = 1:length(fields) - 2
+    prfield = pr.(fields{i});
+    lrfield = lr.(fields{i});
+    
+    for ii = 1:length(noise)
+        p = ranksum(prfieldv(ii:5:end),lrfieldv(ii:5:end));
+        if p < .05
+            x = [prx(ii), lrx(ii)];
+            sigstar(x,p);
+        end
+    end
+    xl = [min([xlim, xltemp]),max([xlim, xltemp])];
+    yl = [min([ylim, yltemp]),max([ylim, yltemp])];
+    linkaxes(a,'xy')
+    xlim(xl);
+    ylim(yl);
+    leg = legend('LDA','LR');
+    set(leg,'Location','Best');
+    saveas(gcf, [parent '\' labels{i} ' (' noise_condition ')' '.png'])
+    
+    % SUBPLOT FOR LDA VS LR BARS ONLY
+    axes(ax2(i));
+    hold all
+    b = bar(noise,[nanmean(prfield,2),nanmean(lrfield,2)],1);
+    b(1).FaceColor = c(1,:);
+    b(2).FaceColor = c(2,:);
+    pause(.01);
+    
+    prx = noise + b(1).XOffset;
+    lrx = noise + b(2).XOffset;
+    
+    errorbar(prx,nanmean(prfield,2),nanstd(prfield,0,2)/sqrt(size(prfield,2)),'.','Color','k');
+    errorbar(lrx,nanmean(lrfield,2),nanstd(lrfield,0,2)/sqrt(size(lrfield,2)),'.','Color','k');
+    
+    for ii = 1:length(noise)
+        p = ranksum(prfieldv(ii:5:end),lrfieldv(ii:5:end));
+        if p < .05
+            x = [prx(ii), lrx(ii)];
+            sigstar(x,p);
+        end
+    end
+    ylabel(labels{i})
+    if i == 1
+        leg = legend('LDA','LR');
+        set(leg,'Location','Best');
+    end
+    set(get(ax2(end),'XLabel'),'String','Noise (V)');
+    set(ax2,'XTickLabel',[]);
+    set(ax2(end),'XTickLabel',noise);
+    set(ax2,'XTick',noise);
+    linkaxes(ax2,'x')
+    axis tight
+    
+    % SUBPLOT FOR BASELINE VS NOISE BARS
+    axes(ax(i));
+    hold all
+    b = bar(noise, nanmean(prfield,2), 'FaceColor', c(1,:));
+    pause(.01)
+    prx = noise + b.XOffset;
+    errorbar(prx,nanmean(prfield,2),nanstd(prfield,0,2)/sqrt(size(prfield,2)),'.','Color','k');
+    
+    for ii = 2:length(noise)
+        p = ranksum(prfield(1,:), prfield(ii,:));
+        if p < .05
+            x = [prx(1) prx(ii)];
+            sigstar(x,p);
+        end
+        
+    end
+    yltemp = ylim;
+    
+    set(gca,'XTickLabel',[]);
+    title([labels{i}])
+    
+    axes(ax(i+length(fields) - 2));
+    hold all
+    b = bar(noise, nanmean(lrfield,2), 'FaceColor', c(2,:));
+    pause(.01)
+    lrx = noise + b.XOffset;
+    errorbar(lrx,nanmean(lrfield,2),nanstd(lrfield,0,2)/sqrt(size(lrfield,2)),'.','Color','k');
+    
+    for ii = 2:length(noise)
+        p = ranksum(lrfield(1,:), lrfield(ii,:));
+        if p < .05
+            x = [lrx(1) lrx(ii)];
+            sigstar(x,p);
+        end
+    end
+    
+    yl = [min([ylim, yltemp]),max([ylim, yltemp])];
+    linkaxes(ax,'x')
+    axis tight
+    set([ax(i),ax(i+length(fields) - 2)],'ylim',yl);
+    set(ax,'XTick',noise);
+    
+    xlabel('Noise (V)')
+end
+

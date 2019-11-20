@@ -1,0 +1,255 @@
+clear
+close all
+clc
+
+%%
+set(0,'DefaultFigureWindowStyle','docked')
+set(0,'DefaultAxesFontName','Times New Roman')
+
+%% load data
+parent = uigetdir();
+files = dir(fullfile(parent,'*.mat'));
+%%
+all_data = struct;
+for i = 1:length(files)
+    load([parent '/' files(i).name])
+    noise = unique([data.noise]);
+    for ii = 1:length(data)
+        fail_ind = setdiff(1:data(ii).results.numTrials,data(ii).results.complete_ind);
+        if data(ii).ctrl == 1
+            pr.complete_rate(noise == data(ii).noise, i) = data(ii).results.complete_rate;
+            pr.path_eff(noise == data(ii).noise, i) = nanmean(data(ii).results.path_eff(data(ii).results.complete_ind));
+            pr.in_time(noise == data(ii).noise, i) = nanmean(data(ii).results.in_time);
+            pr.complete_time(noise == data(ii).noise, i) = nanmean(data(ii).results.complete_time(data(ii).results.complete_ind));
+            pr.error(noise == data(ii).noise, :, i) = nanmean(data(ii).results.error(fail_ind,:),1);
+            pr.dist(noise == data(ii).noise, :, i) = nanmean(data(ii).results.error(data(ii).results.complete_ind,:),1);
+        else
+            lr.complete_rate(noise == data(ii).noise, i) = data(ii).results.complete_rate;
+            lr.path_eff(noise == data(ii).noise, i) = nanmean(data(ii).results.path_eff(data(ii).results.complete_ind));
+            lr.in_time(noise == data(ii).noise, i) = nanmean(data(ii).results.in_time);
+            lr.complete_time(noise == data(ii).noise, i) = nanmean(data(ii).results.complete_time(data(ii).results.complete_ind));
+            lr.error(noise == data(ii).noise, :, i) = nanmean(data(ii).results.error(fail_ind,:),1);
+            lr.dist(noise == data(ii).noise, :, i) = nanmean(data(ii).results.error(data(ii).results.complete_ind,:),1);
+        end
+    end
+end
+
+%% create table
+subs = [ones(5,1); 2*ones(5,1); 3*ones(5,1); 4*ones(5,1); 5*ones(5,1);6*ones(5,1)];
+noisev = [noise,noise,noise,noise,noise,noise]';
+results = table([noisev; noisev],[subs; subs],[ones(size(noisev)); 2*ones(size(noisev))],'VariableNames',{'noise','sub','ctrl'});
+
+%% FIGURE VARIABLES
+if mean(noise) > 10
+    noise = noise/100;
+end
+c = colormap(lines);
+c(2,:) = [c(2,1)+.15 c(2,2)+.15 c(2,3)];
+fields = fieldnames(pr);
+labels = {'Completion Rate', 'Path Efficiency', 'Time in Target (s)', 'Completion Time (s)'};
+noise_condition = strfind(parent,'/');
+if isempty(noise_condition)
+    noise_condition = strfind(parent, '\');
+end
+noise_condition = parent(noise_condition(end)+1:end);
+
+figure(length(fields)+1)
+ax = tight_subplot(2,length(fields) - 2);
+
+figure(length(fields)+2)
+ax2 = tight_subplot(4,1,.04,.09,.1);
+
+markers = {'p:','o:','h:','<:','s:','d:'};
+if isempty(strfind(lower(parent),'channel'))
+    inc = -3*.075*noise(2):.075*noise(2):3*.075*noise(2);
+else
+    inc = -3*.075*noise(2):.075*noise(2):3*.075*noise(2);
+end
+
+%% LOOP THROUGH METRICS
+for i = 1:length(fields) - 2
+    prfield = pr.(fields{i});
+    lrfield = lr.(fields{i});
+    
+    figure(i)
+    a = tight_subplot(2,1);
+    axes(a(1));
+    hold on
+    for ii = 1:size(prfield,2)
+        plot(noise + inc(ii), prfield(:,ii),markers{ii}, 'MarkerSize', 7, 'MarkerEdgeColor', 'k', 'MarkerFaceColor', c(1,:), 'color', c(1,:))
+        plot(noise + inc(ii), lrfield(:,ii),markers{ii}, 'MarkerSize', 7, 'MarkerEdgeColor', 'k', 'MarkerFaceColor', c(2,:), 'color', c(2,:))
+    end
+    title([labels{i}])% ' (' noise_condition ')'])
+    set(gca,'XTickLabel',[]);
+    xltemp = xlim;
+    yltemp = ylim;
+    
+    axes(a(2));
+    hold on
+    b = bar(noise,[nanmean(prfield,2),nanmean(lrfield,2)],1);
+    b(1).FaceColor = c(1,:);
+    b(2).FaceColor = c(2,:);
+    pause(.01);
+    
+    prx = noise + b(1).XOffset;
+    lrx = noise + b(2).XOffset;
+    
+    errorbar(prx,nanmean(prfield,2),nanstd(prfield,0,2)/sqrt(size(prfield,2)),'.','Color','k');
+    errorbar(lrx,nanmean(lrfield,2),nanstd(lrfield,0,2)/sqrt(size(lrfield,2)),'.','Color','k');
+    xlabel('Noise (V)')
+    set(a,'XTick',noise);
+    
+    prfieldv = reshape(prfield,[numel(prfield),1]);
+    lrfieldv = reshape(lrfield,[numel(lrfield),1]);
+    results.(fields{i}) = [prfieldv; lrfieldv];
+%     
+%     results.(strcat('lr_',fields{i})) = lrfieldv;
+    
+    for ii = 1:length(noise)
+        p = ranksum(prfieldv(ii:5:end),lrfieldv(ii:5:end));
+        if p < .05
+            x = [prx(ii), lrx(ii)];
+            sigstar(x,p);
+        end
+    end
+    xl = [min([xlim, xltemp]),max([xlim, xltemp])];
+    yl = [min([ylim, yltemp]),max([ylim, yltemp])];
+    linkaxes(a,'xy')
+    xlim(xl);
+    ylim(yl);
+    leg = legend('LDA','LR');
+    set(leg,'Location','Best');
+    saveas(gcf, [parent '/' labels{i} ' (' noise_condition ')' '.png'])
+    
+    % SUBPLOT FOR LDA VS LR BARS ONLY
+    axes(ax2(i));
+    hold all
+    b = bar(noise,[nanmean(prfield,2),nanmean(lrfield,2)],1);
+    b(1).FaceColor = c(1,:);
+    b(2).FaceColor = c(2,:);
+    pause(.01);
+    
+    prx = noise + b(1).XOffset;
+    lrx = noise + b(2).XOffset;
+    
+    errorbar(prx,nanmean(prfield,2),nanstd(prfield,0,2)/sqrt(size(prfield,2)),'.','Color','k');
+    errorbar(lrx,nanmean(lrfield,2),nanstd(lrfield,0,2)/sqrt(size(lrfield,2)),'.','Color','k');
+    
+    for ii = 1:length(noise)
+        p = ranksum(prfieldv(ii:5:end),lrfieldv(ii:5:end));
+        if p < .05
+            x = [prx(ii), lrx(ii)];
+            sigstar(x,p);
+        end
+    end
+    ylabel(labels{i})
+    if i == 1
+        leg = legend('LDA','LR');
+        set(leg,'Location','Best');
+    end
+    set(get(ax2(end),'XLabel'),'String','Noise (V)');
+    set(ax2,'XTickLabel',[]);
+    set(ax2(end),'XTickLabel',noise);
+    set(ax2,'XTick',noise);
+    linkaxes(ax2,'x')
+    axis tight
+    
+    % SUBPLOT FOR BASELINE VS NOISE BARS
+    axes(ax(i));
+    hold all
+    b = bar(noise, nanmean(prfield,2), 'FaceColor', c(1,:));
+    pause(.01)
+    prx = noise + b.XOffset;
+    errorbar(prx,nanmean(prfield,2),nanstd(prfield,0,2)/sqrt(size(prfield,2)),'.','Color','k');
+    
+    for ii = 2:length(noise)
+        p = ranksum(prfield(1,:), prfield(ii,:));
+        if p < .05
+            x = [prx(1) prx(ii)];
+            sigstar(x,p);
+        end
+        
+    end
+    yltemp = ylim;
+    
+    set(gca,'XTickLabel',[]);
+    title([labels{i}])
+    
+    axes(ax(i+length(fields) - 2));
+    hold all
+    b = bar(noise, nanmean(lrfield,2), 'FaceColor', c(2,:));
+    pause(.01)
+    lrx = noise + b.XOffset;
+    errorbar(lrx,nanmean(lrfield,2),nanstd(lrfield,0,2)/sqrt(size(lrfield,2)),'.','Color','k');
+    
+    for ii = 2:length(noise)
+        p = ranksum(lrfield(1,:), lrfield(ii,:));
+        if p < .05
+            x = [lrx(1) lrx(ii)];
+            sigstar(x,p);
+        end
+    end
+    
+    yl = [min([ylim, yltemp]),max([ylim, yltemp])];
+    linkaxes(ax,'x')
+    axis tight
+    set([ax(i),ax(i+length(fields) - 2)],'ylim',yl);
+    set(ax,'XTick',noise);
+    
+    xlabel('Noise (V)')
+end
+
+saveas(figure(length(fields)+2), [parent '/Comparison (' noise_condition ')' '.png'])
+saveas(figure(length(fields)+1), [parent '/Summary (' noise_condition ')' '.png'])
+save([parent '/' noise_condition ' table'], 'results');
+
+%% mean error for failed trials
+pr_c = linspecer(length(noise) + 2,'blue');
+lr_c = linspecer(length(noise) + 2,'red');
+pr_c = pr_c(3:end,:);
+lr_c = lr_c(3:end,:);
+t = 0:.1:10;
+t = t(1:end-1);
+
+figure
+subplot(121)
+hold all
+for i = 1:length(noise)
+    plot(t, nanmean(pr.error(i,:,:),3),'Color', pr_c(i,:), 'LineWidth',1.5)
+end
+legend(num2str(noise'))
+xlabel('Time (s)')
+title('LDA')
+ylim([0 6])
+ylabel('Mean Euclidean Distance')
+
+subplot(122)
+hold all
+for i = 1:length(noise)
+    plot(t,nanmean(lr.error(i,:,:),3),'Color', lr_c(i,:), 'LineWidth',1.5)
+end
+legend(num2str(noise'))
+title('LR')
+ylim([0 6])
+
+%% mean error for completed trials
+figure
+subplot(121)
+hold all
+for i = 1:length(noise)
+    plot(t, nanmean(pr.dist(i,:,:),3),'Color', pr_c(i,:), 'LineWidth',1.5)
+end
+legend(num2str(noise'))
+xlabel('Time (s)')
+title('LDA')
+ylim([0 6])
+ylabel('Mean Euclidean Distance')
+
+subplot(122)
+hold all
+for i = 1:length(noise)
+    plot(t,nanmean(lr.dist(i,:,:),3),'Color', lr_c(i,:), 'LineWidth',1.5)
+end
+legend(num2str(noise'))
+title('LR')
+ylim([0 6])
